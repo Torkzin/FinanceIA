@@ -90,6 +90,14 @@ export type Dashboard = {
   insights: string[];
 };
 
+export type FinancialChatResponse = {
+  answer: string;
+  tool: string;
+  data: Record<string, unknown>;
+  provider: string;
+  model: string;
+};
+
 export async function apiFetch<T>(path: string, token?: string | null, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   if (token) headers.set("Authorization", `Bearer ${token}`);

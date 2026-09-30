@@ -8,16 +8,18 @@ import {
   CostCenter,
   Dashboard,
   DocumentExtraction,
+  FinancialChatResponse,
   FinancialDocument,
   Invoice,
   Supplier,
 } from "@/lib/api";
 
-type Tab = "dashboard" | "invoices" | "suppliers" | "cost-centers" | "documents";
+type Tab = "dashboard" | "assistant" | "invoices" | "suppliers" | "cost-centers" | "documents";
 type ListResponse<T> = { items: T[]; total: number };
 
 const tabs: Array<{ id: Tab; label: string }> = [
   { id: "dashboard", label: "Visão geral" },
+  { id: "assistant", label: "Assistente financeiro" },
   { id: "invoices", label: "Faturas" },
   { id: "suppliers", label: "Fornecedores" },
   { id: "cost-centers", label: "Centros de custo" },
@@ -146,6 +148,7 @@ export function WorkspaceClient() {
         {error && <p className="mt-5 rounded-xl bg-red-50 p-4 text-sm text-red-700" role="alert">{error}</p>}
         <div className="mt-7">
           {tab === "dashboard" && <DashboardView data={dashboard} />}
+          {tab === "assistant" && <AssistantView token={token} />}
           {tab === "invoices" && <InvoicesView data={invoices} suppliers={suppliers?.items ?? []} />}
           {tab === "suppliers" && <SuppliersView data={suppliers} token={token} refresh={load} />}
           {tab === "cost-centers" && <CostCentersView data={costCenters} />}
@@ -172,6 +175,45 @@ function DashboardView({ data }: { data: Dashboard | null }) {
       <article className="rounded-2xl bg-[#102a21] p-6 text-white"><h2 className="font-black">Insights operacionais</h2><div className="mt-5 space-y-3">{data.insights.map((insight) => <p className="rounded-xl bg-white/10 p-4 text-sm leading-6 text-emerald-50/80" key={insight}>{insight}</p>)}</div></article>
     </div>
     <article className="rounded-2xl border border-[#dfe7e3] bg-white p-6"><h2 className="font-black">Próximos vencimentos</h2><div className="mt-4 overflow-x-auto"><table className="w-full min-w-[620px] text-left text-sm"><thead className="text-[#708078]"><tr><th className="py-3">Fatura</th><th>Fornecedor</th><th>Vencimento</th><th className="text-right">Valor</th></tr></thead><tbody>{data.upcoming.map((item) => <tr className="border-t border-[#edf1ef]" key={item.id}><td className="py-4 font-bold">{item.invoice_number}</td><td>{item.supplier_name}</td><td>{date.format(new Date(item.due_date))}</td><td className="text-right font-bold">{brl(item.amount)}</td></tr>)}</tbody></table></div></article>
+  </div>;
+}
+
+type ChatMessage = { role: "user" | "assistant"; text: string; meta?: string };
+
+const chatSuggestions = [
+  "Quais pagamentos vencem nos próximos 15 dias?",
+  "Quanto gastamos com tecnologia neste mês?",
+  "Quais são nossos cinco maiores fornecedores?",
+  "Compare as despesas deste mês com o mês anterior.",
+];
+
+function AssistantView({ token }: { token: string }) {
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    { role: "assistant", text: "Olá! Posso consultar os dados financeiros da sua empresa usando ferramentas seguras e somente leitura.", meta: "FinanceAI · modo seguro" },
+  ]);
+  const [value, setValue] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function ask(question: string) {
+    const clean = question.trim();
+    if (clean.length < 3 || busy) return;
+    setMessages((current) => [...current, { role: "user", text: clean }]);
+    setValue(""); setBusy(true);
+    try {
+      const response = await apiFetch<FinancialChatResponse>("/api/v1/ai/chat", token, { method: "POST", body: JSON.stringify({ message: clean }) });
+      setMessages((current) => [...current, { role: "assistant", text: response.answer, meta: `${response.provider} · ${response.tool}` }]);
+    } catch (cause) {
+      setMessages((current) => [...current, { role: "assistant", text: cause instanceof Error ? cause.message : "Não foi possível consultar os dados.", meta: "erro" }]);
+    } finally { setBusy(false); }
+  }
+
+  return <div className="grid gap-5 xl:grid-cols-[1fr_300px]">
+    <section className="flex min-h-[620px] flex-col overflow-hidden rounded-2xl border border-[#dfe7e3] bg-white">
+      <div className="border-b border-[#e6ece9] px-6 py-4"><h2 className="font-black">Converse com seus dados</h2><p className="mt-1 text-xs text-[#708078]">O assistente escolhe consultas controladas; não possui acesso SQL livre.</p></div>
+      <div className="flex-1 space-y-4 overflow-y-auto p-5 sm:p-6">{messages.map((message, index) => <div className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`} key={`${message.role}-${index}`}><div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-6 ${message.role === "user" ? "bg-[#0b6b4f] text-white" : "bg-[#f0f4f2] text-[#23352e]"}`}><p>{message.text}</p>{message.meta && <p className={`mt-2 text-[10px] font-bold uppercase tracking-wide ${message.role === "user" ? "text-emerald-100" : "text-[#779087]"}`}>{message.meta}</p>}</div></div>)}{busy && <div className="w-fit rounded-2xl bg-[#f0f4f2] px-4 py-3 text-sm text-[#61716a]">Consultando ferramenta segura…</div>}</div>
+      <form className="flex gap-3 border-t border-[#e6ece9] p-4" onSubmit={(event) => { event.preventDefault(); void ask(value); }}><input className="field flex-1" value={value} onChange={(event) => setValue(event.target.value)} placeholder="Pergunte sobre despesas, vencimentos ou fornecedores…" maxLength={1000} /><button className="rounded-xl bg-[#0b6b4f] px-5 py-3 text-sm font-bold text-white disabled:opacity-50" disabled={busy || value.trim().length < 3}>Enviar</button></form>
+    </section>
+    <aside className="rounded-2xl bg-[#102a21] p-5 text-white"><p className="text-xs font-black uppercase tracking-[0.15em] text-[#c8f266]">Sugestões</p><div className="mt-5 space-y-3">{chatSuggestions.map((suggestion) => <button className="w-full rounded-xl border border-white/10 bg-white/[0.07] p-3 text-left text-sm leading-5 text-emerald-50/80 transition hover:bg-white/15" key={suggestion} onClick={() => void ask(suggestion)}>{suggestion}</button>)}</div><div className="mt-6 border-t border-white/10 pt-5"><p className="text-xs font-bold">Proteções ativas</p><ul className="mt-3 space-y-2 text-xs leading-5 text-emerald-100/60"><li>• Escopo por empresa</li><li>• Ferramentas somente leitura</li><li>• Períodos e limites controlados</li><li>• Sem SQL gerado pela IA</li></ul></div></aside>
   </div>;
 }
 

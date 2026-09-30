@@ -2,7 +2,7 @@
 
 FinanceAI is a portfolio-grade B2B financial operations platform designed to demonstrate practical full-stack engineering, automation, and responsible AI integration.
 
-> Current status: **Phase 7 — AI document extraction complete**. The multi-tenant foundation now includes secure authentication, financial CRUDs, dashboard analytics, protected uploads, structured AI extraction, and mandatory human review before invoice creation.
+> Current status: **Phase 8 — secure financial assistant complete**. The platform now includes authentication, financial operations, dashboard analytics, protected uploads, human-reviewed extraction, and natural-language queries backed exclusively by tenant-scoped read-only tools.
 
 ## Why this project exists
 
@@ -142,7 +142,20 @@ Configuration:
 
 AI telemetry records provider/model latency and token counts without logging document content.
 
+## Secure financial assistant
+
+`POST /api/v1/ai/chat` accepts natural-language financial questions and routes each request through a small allowlist of read-only tools:
+
+- `get_upcoming_payments`
+- `get_overdue_invoices`
+- `get_expenses_by_period`
+- `get_top_suppliers`
+- `get_cost_center_summary`
+- `compare_monthly_expenses`
+
+Every query is scoped by the authenticated user's `company_id`; the model never receives database credentials or unrestricted SQL access. Tool inputs have controlled date ranges and result limits. With `AI_PROVIDER=demo`, a deterministic intent router and response formatter keep the complete feature demonstrable without external API costs. With `AI_PROVIDER=openai`, the Responses API selects strict function tools and summarizes only their controlled output.
+
 ## Roadmap
 
-The project is developed in deliberately small phases. Phases 1–7 cover foundation, persistence, authentication, financial operations, dashboard analytics, secure document ingestion, and human-reviewed AI extraction. See [docs/architecture.md](docs/architecture.md) for the complete task breakdown.
+The project is developed in deliberately small phases. Phases 1–8 cover foundation, persistence, authentication, financial operations, dashboard analytics, secure document ingestion, human-reviewed AI extraction, and the safe financial assistant. See [docs/architecture.md](docs/architecture.md) for the complete task breakdown.
 
