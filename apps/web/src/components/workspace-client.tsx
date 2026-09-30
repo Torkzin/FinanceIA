@@ -4,6 +4,8 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/components/auth-provider";
 import {
+  Anomaly,
+  AnomalyAnalysisResponse,
   apiFetch,
   CostCenter,
   Dashboard,
@@ -16,13 +18,14 @@ import {
   Supplier,
 } from "@/lib/api";
 
-type Tab = "dashboard" | "assistant" | "knowledge" | "invoices" | "suppliers" | "cost-centers" | "documents";
+type Tab = "dashboard" | "assistant" | "knowledge" | "anomalies" | "invoices" | "suppliers" | "cost-centers" | "documents";
 type ListResponse<T> = { items: T[]; total: number };
 
 const tabs: Array<{ id: Tab; label: string }> = [
   { id: "dashboard", label: "Visão geral" },
   { id: "assistant", label: "Assistente financeiro" },
   { id: "knowledge", label: "Base de conhecimento" },
+  { id: "anomalies", label: "Anomalias" },
   { id: "invoices", label: "Faturas" },
   { id: "suppliers", label: "Fornecedores" },
   { id: "cost-centers", label: "Centros de custo" },
@@ -94,6 +97,7 @@ export function WorkspaceClient() {
   const [costCenters, setCostCenters] = useState<ListResponse<CostCenter> | null>(null);
   const [documents, setDocuments] = useState<ListResponse<FinancialDocument> | null>(null);
   const [knowledgeDocuments, setKnowledgeDocuments] = useState<ListResponse<KnowledgeDocument> | null>(null);
+  const [anomalies, setAnomalies] = useState<ListResponse<Anomaly> | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -102,13 +106,14 @@ export function WorkspaceClient() {
     setLoading(true);
     setError("");
     try {
-      const [dashboardData, invoiceData, supplierData, costCenterData, documentData, knowledgeData] = await Promise.all([
+      const [dashboardData, invoiceData, supplierData, costCenterData, documentData, knowledgeData, anomalyData] = await Promise.all([
         apiFetch<Dashboard>("/api/v1/dashboard", token),
         apiFetch<ListResponse<Invoice>>("/api/v1/invoices?page_size=100", token),
         apiFetch<ListResponse<Supplier>>("/api/v1/suppliers?page_size=100", token),
         apiFetch<ListResponse<CostCenter>>("/api/v1/cost-centers?page_size=100", token),
         apiFetch<ListResponse<FinancialDocument>>("/api/v1/documents", token),
         apiFetch<ListResponse<KnowledgeDocument>>("/api/v1/knowledge/documents", token),
+        apiFetch<ListResponse<Anomaly>>("/api/v1/anomalies", token),
       ]);
       setDashboard(dashboardData);
       setInvoices(invoiceData);
@@ -116,6 +121,7 @@ export function WorkspaceClient() {
       setCostCenters(costCenterData);
       setDocuments(documentData);
       setKnowledgeDocuments(knowledgeData);
+      setAnomalies(anomalyData);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Erro ao carregar workspace");
     } finally {
@@ -156,6 +162,7 @@ export function WorkspaceClient() {
           {tab === "dashboard" && <DashboardView data={dashboard} />}
           {tab === "assistant" && <AssistantView token={token} />}
           {tab === "knowledge" && <KnowledgeView data={knowledgeDocuments} token={token} isAdmin={user.role === "admin"} refresh={load} />}
+          {tab === "anomalies" && <AnomaliesView data={anomalies} token={token} canDetect={["admin", "finance"].includes(user.role)} refresh={load} />}
           {tab === "invoices" && <InvoicesView data={invoices} suppliers={suppliers?.items ?? []} />}
           {tab === "suppliers" && <SuppliersView data={suppliers} token={token} refresh={load} />}
           {tab === "cost-centers" && <CostCentersView data={costCenters} />}
@@ -257,6 +264,49 @@ function KnowledgeView({ data, token, isAdmin, refresh }: { data: ListResponse<K
     {message && <p className="rounded-xl bg-white p-4 text-sm font-bold text-[#0b6b4f]">{message}</p>}
     {result && <article className="rounded-2xl border border-[#dfe7e3] bg-white p-6"><div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-black">Resposta fundamentada</h2><span className={`rounded-full px-3 py-1 text-xs font-bold ${result.grounded ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{result.grounded ? `${result.sources.length} fonte(s)` : "Sem fonte suficiente"}</span></div><p className="mt-5 whitespace-pre-wrap text-sm leading-7 text-[#32443d]">{result.answer}</p>{result.sources.length > 0 && <div className="mt-6 space-y-3 border-t border-[#e6ece9] pt-5"><p className="text-xs font-black uppercase tracking-[0.15em] text-[#0b6b4f]">Fontes consultadas</p>{result.sources.map((source, index) => <div className="rounded-xl bg-[#f3f6f4] p-4" key={`${source.document_id}-${index}`}><div className="flex flex-wrap justify-between gap-2 text-xs font-bold"><span>{source.document_name}{source.page_number ? ` · página ${source.page_number}` : ""}</span><span>{Math.round(source.similarity * 100)}% similar</span></div><p className="mt-2 text-xs leading-5 text-[#66766f]">{source.excerpt}</p></div>)}</div>}<p className="mt-4 text-[10px] uppercase tracking-wide text-[#84918c]">{result.provider} · {result.model}</p></article>}
     <Table headers={["Documento", "Tipo", "Páginas", "Trechos", "Modelo", "Status"]}>{data.items.map((item) => <tr className="border-t border-[#edf1ef]" key={item.id}><td className="py-4 font-bold">{item.original_name}{item.processing_error && <span className="block text-xs font-normal text-red-700">{item.processing_error}</span>}</td><td>{item.media_type}</td><td>{item.page_count ?? "—"}</td><td>{item.chunk_count}</td><td className="text-xs">{item.embedding_model ?? "—"}</td><td className="text-right"><Status value={item.status} /></td></tr>)}</Table>
+  </div>;
+}
+
+const anomalyLabels: Record<string, string> = {
+  supplier_amount_spike: "Valor acima do histórico",
+  duplicate_document_number: "Número de documento repetido",
+  possible_duplicate_payment: "Possível pagamento duplicado",
+  cost_center_monthly_growth: "Crescimento do centro de custo",
+};
+
+function AnomaliesView({ data, token, canDetect, refresh }: { data: ListResponse<Anomaly> | null; token: string; canDetect: boolean; refresh: () => Promise<void> }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [message, setMessage] = useState("");
+
+  async function detect() {
+    setBusy("detect"); setMessage("");
+    try {
+      const response = await apiFetch<{ detected: number; created: number; updated: number }>("/api/v1/anomalies/detect", token, { method: "POST" });
+      setMessage(`${response.detected} anomalia(s) detectada(s): ${response.created} nova(s) e ${response.updated} atualizada(s).`); await refresh();
+    } catch (cause) { setMessage(cause instanceof Error ? cause.message : "Não foi possível executar a análise."); }
+    finally { setBusy(null); }
+  }
+
+  async function analyze(anomalyId: string) {
+    setBusy(anomalyId); setMessage("");
+    try {
+      const response = await apiFetch<AnomalyAnalysisResponse>(`/api/v1/anomalies/${anomalyId}/analyze`, token, { method: "POST" });
+      setMessage(`Análise executiva gerada por ${response.provider}.`); await refresh();
+    } catch (cause) { setMessage(cause instanceof Error ? cause.message : "Não foi possível analisar a anomalia."); }
+    finally { setBusy(null); }
+  }
+
+  if (!data) return <Empty />;
+  const counts = {
+    high: data.items.filter((item) => item.severity === "high").length,
+    medium: data.items.filter((item) => item.severity === "medium").length,
+    reviewed: data.items.filter((item) => item.status === "reviewed").length,
+  };
+  return <div className="space-y-5">
+    <div className="grid gap-4 sm:grid-cols-3"><article className="rounded-2xl border border-red-100 bg-white p-5"><p className="text-sm text-[#66766f]">Severidade alta</p><p className="mt-2 text-3xl font-black text-red-700">{counts.high}</p></article><article className="rounded-2xl border border-amber-100 bg-white p-5"><p className="text-sm text-[#66766f]">Severidade média</p><p className="mt-2 text-3xl font-black text-amber-700">{counts.medium}</p></article><article className="rounded-2xl border border-emerald-100 bg-white p-5"><p className="text-sm text-[#66766f]">Revisadas com IA</p><p className="mt-2 text-3xl font-black text-emerald-700">{counts.reviewed}</p></article></div>
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-[#102a21] p-5 text-white"><div><h2 className="font-black">Motor de regras explicáveis</h2><p className="mt-1 text-xs text-emerald-100/60">Compara histórico de fornecedores, duplicidades e evolução de centros de custo.</p></div>{canDetect && <button className="rounded-xl bg-[#c8f266] px-4 py-2.5 text-sm font-black text-[#19310e] disabled:opacity-50" disabled={busy !== null} onClick={() => void detect()}>{busy === "detect" ? "Analisando…" : "Executar detecção"}</button>}</div>
+    {message && <p className="rounded-xl bg-white p-4 text-sm font-bold text-[#0b6b4f]">{message}</p>}
+    {data.items.length === 0 ? <div className="rounded-2xl border border-[#dfe7e3] bg-white p-10 text-center text-sm text-[#66766f]">Nenhuma anomalia registrada. Execute a detecção para analisar o histórico.</div> : <div className="space-y-4">{data.items.map((item) => <article className="rounded-2xl border border-[#dfe7e3] bg-white p-5" key={item.id}><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><span className={`rounded-full px-2.5 py-1 text-xs font-black uppercase ${item.severity === "high" ? "bg-red-50 text-red-700" : item.severity === "medium" ? "bg-amber-50 text-amber-700" : "bg-sky-50 text-sky-700"}`}>{item.severity}</span><span className="text-xs font-bold text-[#708078]">{item.status}</span></div><h3 className="mt-3 font-black">{anomalyLabels[item.anomaly_type] ?? item.anomaly_type}</h3><p className="mt-2 text-sm leading-6 text-[#5d6c66]">{item.explanation}</p></div><button className="rounded-xl border border-[#b9c9c2] px-4 py-2.5 text-xs font-bold text-[#0b6b4f] disabled:opacity-50" disabled={busy !== null} onClick={() => void analyze(item.id)}>{busy === item.id ? "Gerando…" : item.ai_analysis ? "Atualizar análise" : "Analisar com IA"}</button></div><div className="mt-4 flex flex-wrap gap-2">{Object.entries(item.metrics).slice(0, 6).map(([key, value]) => <span className="rounded-lg bg-[#f1f5f3] px-2.5 py-1.5 text-xs text-[#53635c]" key={key}><strong>{key.replaceAll("_", " ")}:</strong> {Array.isArray(value) ? value.length : String(value)}</span>)}</div>{item.ai_analysis && <div className="mt-5 rounded-xl border-l-4 border-[#0b6b4f] bg-[#f2f7f4] p-4"><p className="text-xs font-black uppercase tracking-[0.12em] text-[#0b6b4f]">Análise executiva</p><p className="mt-2 text-sm leading-6 text-[#405149]">{item.ai_analysis}</p><p className="mt-2 text-[10px] uppercase tracking-wide text-[#829087]">{item.ai_provider} · {item.ai_model}</p></div>}</article>)}</div>}
   </div>;
 }
 

@@ -129,6 +129,29 @@ export type KnowledgeQueryResponse = {
   model: string;
 };
 
+export type Anomaly = {
+  id: string;
+  related_invoice_id: string;
+  anomaly_type: string;
+  severity: "low" | "medium" | "high";
+  explanation: string;
+  metrics: Record<string, unknown>;
+  status: "open" | "reviewed" | "dismissed";
+  detected_at: string;
+  ai_analysis: string | null;
+  ai_provider: string | null;
+  ai_model: string | null;
+  analyzed_at: string | null;
+};
+
+export type AnomalyAnalysisResponse = {
+  anomaly_id: string;
+  analysis: string;
+  provider: string;
+  model: string;
+  analyzed_at: string;
+};
+
 export async function apiFetch<T>(path: string, token?: string | null, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   if (token) headers.set("Authorization", `Bearer ${token}`);

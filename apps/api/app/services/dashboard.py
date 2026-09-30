@@ -6,7 +6,7 @@ from uuid import UUID
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import CostCenter, Invoice, Supplier
+from app.db.models import Anomaly, CostCenter, Invoice, Supplier
 from app.schemas.dashboard import (
     BreakdownItem,
     DashboardResponse,
@@ -118,6 +118,13 @@ async def build_dashboard(session: AsyncSession, company_id: UUID) -> DashboardR
     )
     monthly_evolution = [MonthlyTotal(month=row[0].date(), amount=row[1]) for row in evolution_rows]
 
+    anomaly_count = await session.scalar(
+        select(func.count(Anomaly.id)).where(
+            Anomaly.company_id == company_id,
+            Anomaly.status != "dismissed",
+        )
+    )
+
     insights: list[str] = []
     if overdue.count:
         insights.append(f"There are {overdue.count} overdue payments requiring attention.")
@@ -127,6 +134,8 @@ async def build_dashboard(session: AsyncSession, company_id: UUID) -> DashboardR
         insights.append(
             f"{by_category[0].label} is the largest expense category in the six-month period."
         )
+    if anomaly_count:
+        insights.append(f"{anomaly_count} explainable financial anomalies require review.")
     if not insights:
         insights.append("No immediate financial exceptions were detected.")
 
@@ -139,6 +148,6 @@ async def build_dashboard(session: AsyncSession, company_id: UUID) -> DashboardR
         by_cost_center=by_cost_center,
         top_suppliers=top_suppliers,
         monthly_evolution=monthly_evolution,
-        anomaly_count=0,
+        anomaly_count=anomaly_count or 0,
         insights=insights,
     )

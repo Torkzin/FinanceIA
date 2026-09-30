@@ -2,7 +2,7 @@
 
 FinanceAI is a portfolio-grade B2B financial operations platform designed to demonstrate practical full-stack engineering, automation, and responsible AI integration.
 
-> Current status: **Phase 9 — cited knowledge base complete**. The platform now includes authentication, financial operations, dashboard analytics, protected uploads, human-reviewed extraction, a safe financial assistant, and tenant-scoped RAG with pgvector and mandatory source attribution.
+> Current status: **Phase 10 — explainable anomaly detection complete**. The platform now includes authentication, financial operations, dashboard analytics, protected uploads, human-reviewed extraction, safe assistants, cited RAG, and auditable financial anomaly rules with optional executive AI analysis.
 
 ## Why this project exists
 
@@ -157,7 +157,7 @@ Every query is scoped by the authenticated user's `company_id`; the model never 
 
 ## Roadmap
 
-The project is developed in deliberately small phases. Phases 1–9 cover foundation, persistence, authentication, financial operations, dashboard analytics, secure document ingestion, human-reviewed AI extraction, the safe financial assistant, and a cited internal knowledge base. See [docs/architecture.md](docs/architecture.md) for the complete task breakdown.
+The project is developed in deliberately small phases. Phases 1–10 cover foundation, persistence, authentication, financial operations, dashboard analytics, secure document ingestion, human-reviewed AI extraction, safe assistants, cited RAG, and explainable anomaly detection. See [docs/architecture.md](docs/architecture.md) for the complete task breakdown.
 
 ### Phase 9 knowledge base
 
@@ -167,4 +167,13 @@ The project is developed in deliberately small phases. Phases 1–9 cover founda
 - Knowledge answers include document, relevant excerpt, page (when available), and similarity.
 - If no source is relevant, the assistant abstains instead of generating an unsupported answer.
 - `AI_PROVIDER=demo` uses local deterministic embeddings; `AI_PROVIDER=openai` uses `text-embedding-3-small` by default.
+
+### Phase 10 anomaly detection
+
+- Deterministic rules detect supplier amount spikes, repeated document numbers, close duplicate payments, and abnormal cost-center growth.
+- Every finding stores severity, explanation, calculated metrics, related invoice, status, and detection time.
+- Detection is idempotent and tenant-scoped; administrators and finance users can execute scans.
+- The dashboard anomaly count is backed by persisted findings.
+- “Analyze with AI” summarizes an already-calculated finding and recommends human checks without making payment decisions.
+- `AI_PROVIDER=demo` produces a deterministic executive summary, while OpenAI mode uses the Responses API with `store=false`.
 
