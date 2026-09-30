@@ -8,6 +8,7 @@ from app.api.v1.routes import (
     documents,
     health,
     invoices,
+    knowledge,
     suppliers,
 )
 
@@ -18,5 +19,6 @@ api_router.include_router(suppliers.router, prefix="/suppliers", tags=["supplier
 api_router.include_router(cost_centers.router, prefix="/cost-centers", tags=["cost-centers"])
 api_router.include_router(invoices.router, prefix="/invoices", tags=["invoices"])
 api_router.include_router(documents.router, prefix="/documents", tags=["documents"])
+api_router.include_router(knowledge.router, prefix="/knowledge", tags=["knowledge"])
 api_router.include_router(dashboard.router, prefix="/dashboard", tags=["dashboard"])
 api_router.include_router(health.router, prefix="/health", tags=["health"])

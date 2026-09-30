@@ -11,15 +11,18 @@ import {
   FinancialChatResponse,
   FinancialDocument,
   Invoice,
+  KnowledgeDocument,
+  KnowledgeQueryResponse,
   Supplier,
 } from "@/lib/api";
 
-type Tab = "dashboard" | "assistant" | "invoices" | "suppliers" | "cost-centers" | "documents";
+type Tab = "dashboard" | "assistant" | "knowledge" | "invoices" | "suppliers" | "cost-centers" | "documents";
 type ListResponse<T> = { items: T[]; total: number };
 
 const tabs: Array<{ id: Tab; label: string }> = [
   { id: "dashboard", label: "Visão geral" },
   { id: "assistant", label: "Assistente financeiro" },
+  { id: "knowledge", label: "Base de conhecimento" },
   { id: "invoices", label: "Faturas" },
   { id: "suppliers", label: "Fornecedores" },
   { id: "cost-centers", label: "Centros de custo" },
@@ -77,7 +80,7 @@ function Login() {
 }
 
 function Status({ value }: { value: string }) {
-  const green = ["paid", "approved", "active", "uploaded", "completed"].includes(value);
+  const green = ["paid", "approved", "active", "uploaded", "completed", "indexed"].includes(value);
   const red = ["overdue", "rejected", "failed"].includes(value);
   return <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${green ? "bg-emerald-50 text-emerald-700" : red ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>{value}</span>;
 }
@@ -90,6 +93,7 @@ export function WorkspaceClient() {
   const [suppliers, setSuppliers] = useState<ListResponse<Supplier> | null>(null);
   const [costCenters, setCostCenters] = useState<ListResponse<CostCenter> | null>(null);
   const [documents, setDocuments] = useState<ListResponse<FinancialDocument> | null>(null);
+  const [knowledgeDocuments, setKnowledgeDocuments] = useState<ListResponse<KnowledgeDocument> | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -98,18 +102,20 @@ export function WorkspaceClient() {
     setLoading(true);
     setError("");
     try {
-      const [dashboardData, invoiceData, supplierData, costCenterData, documentData] = await Promise.all([
+      const [dashboardData, invoiceData, supplierData, costCenterData, documentData, knowledgeData] = await Promise.all([
         apiFetch<Dashboard>("/api/v1/dashboard", token),
         apiFetch<ListResponse<Invoice>>("/api/v1/invoices?page_size=100", token),
         apiFetch<ListResponse<Supplier>>("/api/v1/suppliers?page_size=100", token),
         apiFetch<ListResponse<CostCenter>>("/api/v1/cost-centers?page_size=100", token),
         apiFetch<ListResponse<FinancialDocument>>("/api/v1/documents", token),
+        apiFetch<ListResponse<KnowledgeDocument>>("/api/v1/knowledge/documents", token),
       ]);
       setDashboard(dashboardData);
       setInvoices(invoiceData);
       setSuppliers(supplierData);
       setCostCenters(costCenterData);
       setDocuments(documentData);
+      setKnowledgeDocuments(knowledgeData);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Erro ao carregar workspace");
     } finally {
@@ -149,6 +155,7 @@ export function WorkspaceClient() {
         <div className="mt-7">
           {tab === "dashboard" && <DashboardView data={dashboard} />}
           {tab === "assistant" && <AssistantView token={token} />}
+          {tab === "knowledge" && <KnowledgeView data={knowledgeDocuments} token={token} isAdmin={user.role === "admin"} refresh={load} />}
           {tab === "invoices" && <InvoicesView data={invoices} suppliers={suppliers?.items ?? []} />}
           {tab === "suppliers" && <SuppliersView data={suppliers} token={token} refresh={load} />}
           {tab === "cost-centers" && <CostCentersView data={costCenters} />}
@@ -214,6 +221,42 @@ function AssistantView({ token }: { token: string }) {
       <form className="flex gap-3 border-t border-[#e6ece9] p-4" onSubmit={(event) => { event.preventDefault(); void ask(value); }}><input className="field flex-1" value={value} onChange={(event) => setValue(event.target.value)} placeholder="Pergunte sobre despesas, vencimentos ou fornecedores…" maxLength={1000} /><button className="rounded-xl bg-[#0b6b4f] px-5 py-3 text-sm font-bold text-white disabled:opacity-50" disabled={busy || value.trim().length < 3}>Enviar</button></form>
     </section>
     <aside className="rounded-2xl bg-[#102a21] p-5 text-white"><p className="text-xs font-black uppercase tracking-[0.15em] text-[#c8f266]">Sugestões</p><div className="mt-5 space-y-3">{chatSuggestions.map((suggestion) => <button className="w-full rounded-xl border border-white/10 bg-white/[0.07] p-3 text-left text-sm leading-5 text-emerald-50/80 transition hover:bg-white/15" key={suggestion} onClick={() => void ask(suggestion)}>{suggestion}</button>)}</div><div className="mt-6 border-t border-white/10 pt-5"><p className="text-xs font-bold">Proteções ativas</p><ul className="mt-3 space-y-2 text-xs leading-5 text-emerald-100/60"><li>• Escopo por empresa</li><li>• Ferramentas somente leitura</li><li>• Períodos e limites controlados</li><li>• Sem SQL gerado pela IA</li></ul></div></aside>
+  </div>;
+}
+
+function KnowledgeView({ data, token, isAdmin, refresh }: { data: ListResponse<KnowledgeDocument> | null; token: string; isAdmin: boolean; refresh: () => Promise<void> }) {
+  const [question, setQuestion] = useState("");
+  const [result, setResult] = useState<KnowledgeQueryResponse | null>(null);
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function upload(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setBusy(true); setMessage("");
+    const form = new FormData(event.currentTarget);
+    try {
+      await apiFetch<KnowledgeDocument>("/api/v1/knowledge/documents", token, { method: "POST", body: form });
+      event.currentTarget.reset(); setMessage("Documento indexado na base de conhecimento."); await refresh();
+    } catch (cause) { setMessage(cause instanceof Error ? cause.message : "Não foi possível indexar o documento."); }
+    finally { setBusy(false); }
+  }
+
+  async function ask(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); if (question.trim().length < 3) return; setBusy(true); setMessage("");
+    try {
+      setResult(await apiFetch<KnowledgeQueryResponse>("/api/v1/knowledge/query", token, { method: "POST", body: JSON.stringify({ question, limit: 5 }) }));
+    } catch (cause) { setMessage(cause instanceof Error ? cause.message : "Não foi possível pesquisar."); }
+    finally { setBusy(false); }
+  }
+
+  if (!data) return <Empty />;
+  return <div className="space-y-5">
+    <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
+      {isAdmin && <form className="rounded-2xl border border-dashed border-[#9bb0a7] bg-white p-6" onSubmit={upload}><p className="text-xs font-black uppercase tracking-[0.15em] text-[#0b6b4f]">Somente administradores</p><h2 className="mt-2 font-black">Adicionar política ou manual</h2><p className="mt-2 text-sm leading-6 text-[#66766f]">Envie PDF pesquisável ou TXT. O conteúdo será fragmentado e indexado com pgvector.</p><div className="mt-5 flex flex-wrap gap-3"><input className="text-sm" name="file" type="file" accept=".pdf,.txt,application/pdf,text/plain" required /><button className="rounded-xl bg-[#0b6b4f] px-4 py-2.5 text-sm font-bold text-white disabled:opacity-60" disabled={busy}>{busy ? "Indexando…" : "Enviar e indexar"}</button></div></form>}
+      <form className={`rounded-2xl bg-[#102a21] p-6 text-white ${!isAdmin ? "xl:col-span-2" : ""}`} onSubmit={ask}><p className="text-xs font-black uppercase tracking-[0.15em] text-[#c8f266]">RAG com fontes</p><h2 className="mt-2 text-xl font-black">Pergunte às políticas internas</h2><p className="mt-2 text-sm leading-6 text-emerald-50/70">A resposta só é apresentada quando existem trechos relevantes na base.</p><textarea className="mt-5 min-h-28 w-full rounded-xl border border-white/15 bg-white/10 p-4 text-sm text-white outline-none placeholder:text-emerald-100/40" value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Ex.: Qual é o limite para reembolso de hospedagem?" maxLength={1000} required /><button className="mt-3 rounded-xl bg-[#c8f266] px-5 py-2.5 text-sm font-black text-[#19310e] disabled:opacity-50" disabled={busy || question.trim().length < 3}>Pesquisar fontes</button></form>
+    </div>
+    {message && <p className="rounded-xl bg-white p-4 text-sm font-bold text-[#0b6b4f]">{message}</p>}
+    {result && <article className="rounded-2xl border border-[#dfe7e3] bg-white p-6"><div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-black">Resposta fundamentada</h2><span className={`rounded-full px-3 py-1 text-xs font-bold ${result.grounded ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{result.grounded ? `${result.sources.length} fonte(s)` : "Sem fonte suficiente"}</span></div><p className="mt-5 whitespace-pre-wrap text-sm leading-7 text-[#32443d]">{result.answer}</p>{result.sources.length > 0 && <div className="mt-6 space-y-3 border-t border-[#e6ece9] pt-5"><p className="text-xs font-black uppercase tracking-[0.15em] text-[#0b6b4f]">Fontes consultadas</p>{result.sources.map((source, index) => <div className="rounded-xl bg-[#f3f6f4] p-4" key={`${source.document_id}-${index}`}><div className="flex flex-wrap justify-between gap-2 text-xs font-bold"><span>{source.document_name}{source.page_number ? ` · página ${source.page_number}` : ""}</span><span>{Math.round(source.similarity * 100)}% similar</span></div><p className="mt-2 text-xs leading-5 text-[#66766f]">{source.excerpt}</p></div>)}</div>}<p className="mt-4 text-[10px] uppercase tracking-wide text-[#84918c]">{result.provider} · {result.model}</p></article>}
+    <Table headers={["Documento", "Tipo", "Páginas", "Trechos", "Modelo", "Status"]}>{data.items.map((item) => <tr className="border-t border-[#edf1ef]" key={item.id}><td className="py-4 font-bold">{item.original_name}{item.processing_error && <span className="block text-xs font-normal text-red-700">{item.processing_error}</span>}</td><td>{item.media_type}</td><td>{item.page_count ?? "—"}</td><td>{item.chunk_count}</td><td className="text-xs">{item.embedding_model ?? "—"}</td><td className="text-right"><Status value={item.status} /></td></tr>)}</Table>
   </div>;
 }
 

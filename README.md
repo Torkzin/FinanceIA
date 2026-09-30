@@ -2,7 +2,7 @@
 
 FinanceAI is a portfolio-grade B2B financial operations platform designed to demonstrate practical full-stack engineering, automation, and responsible AI integration.
 
-> Current status: **Phase 8 — secure financial assistant complete**. The platform now includes authentication, financial operations, dashboard analytics, protected uploads, human-reviewed extraction, and natural-language queries backed exclusively by tenant-scoped read-only tools.
+> Current status: **Phase 9 — cited knowledge base complete**. The platform now includes authentication, financial operations, dashboard analytics, protected uploads, human-reviewed extraction, a safe financial assistant, and tenant-scoped RAG with pgvector and mandatory source attribution.
 
 ## Why this project exists
 
@@ -157,5 +157,14 @@ Every query is scoped by the authenticated user's `company_id`; the model never 
 
 ## Roadmap
 
-The project is developed in deliberately small phases. Phases 1–8 cover foundation, persistence, authentication, financial operations, dashboard analytics, secure document ingestion, human-reviewed AI extraction, and the safe financial assistant. See [docs/architecture.md](docs/architecture.md) for the complete task breakdown.
+The project is developed in deliberately small phases. Phases 1–9 cover foundation, persistence, authentication, financial operations, dashboard analytics, secure document ingestion, human-reviewed AI extraction, the safe financial assistant, and a cited internal knowledge base. See [docs/architecture.md](docs/architecture.md) for the complete task breakdown.
+
+### Phase 9 knowledge base
+
+- Administrators can index searchable PDF or TXT policies and manuals.
+- Text is split into page-aware chunks and stored as 1536-dimensional vectors in PostgreSQL/pgvector.
+- Queries are always tenant-scoped and ranked with cosine similarity.
+- Knowledge answers include document, relevant excerpt, page (when available), and similarity.
+- If no source is relevant, the assistant abstains instead of generating an unsupported answer.
+- `AI_PROVIDER=demo` uses local deterministic embeddings; `AI_PROVIDER=openai` uses `text-embedding-3-small` by default.
 

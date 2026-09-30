@@ -15,6 +15,11 @@ ALLOWED_SIGNATURES = {
     ".jpeg": (b"\xff\xd8\xff", "image/jpeg"),
 }
 
+KNOWLEDGE_SIGNATURES = {
+    ".pdf": (b"%PDF-", "application/pdf"),
+    ".txt": (b"", "text/plain"),
+}
+
 
 @dataclass(frozen=True)
 class StoredFile:
@@ -25,16 +30,24 @@ class StoredFile:
 
 
 class LocalDocumentStorage:
-    def __init__(self, root: str | Path | None = None) -> None:
+    def __init__(
+        self,
+        root: str | Path | None = None,
+        *,
+        allowed_signatures: dict[str, tuple[bytes, str]] | None = None,
+        allowed_message: str = "Only PDF, PNG, JPG, and JPEG files are allowed",
+    ) -> None:
         self.root = Path(root or settings.document_storage_path).resolve()
+        self.allowed_signatures = allowed_signatures or ALLOWED_SIGNATURES
+        self.allowed_message = allowed_message
 
     async def save(self, upload: UploadFile, company_id: UUID, document_id: UUID) -> StoredFile:
         extension = Path(upload.filename or "").suffix.lower()
-        signature = ALLOWED_SIGNATURES.get(extension)
+        signature = self.allowed_signatures.get(extension)
         if not signature:
             raise HTTPException(
                 status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-                detail="Only PDF, PNG, JPG, and JPEG files are allowed",
+                detail=self.allowed_message,
             )
 
         company_directory = self.root / str(company_id)
@@ -87,3 +100,8 @@ class LocalDocumentStorage:
 
 
 document_storage = LocalDocumentStorage()
+knowledge_storage = LocalDocumentStorage(
+    settings.knowledge_storage_path,
+    allowed_signatures=KNOWLEDGE_SIGNATURES,
+    allowed_message="Only searchable PDF and TXT files are allowed",
+)

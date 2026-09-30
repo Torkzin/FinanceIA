@@ -98,6 +98,37 @@ export type FinancialChatResponse = {
   model: string;
 };
 
+export type KnowledgeDocument = {
+  id: string;
+  original_name: string;
+  media_type: string;
+  size_bytes: number;
+  status: string;
+  uploaded_at: string;
+  indexed_at: string | null;
+  page_count: number | null;
+  chunk_count: number;
+  embedding_provider: string | null;
+  embedding_model: string | null;
+  processing_error: string | null;
+};
+
+export type KnowledgeSource = {
+  document_id: string;
+  document_name: string;
+  excerpt: string;
+  page_number: number | null;
+  similarity: number;
+};
+
+export type KnowledgeQueryResponse = {
+  answer: string;
+  sources: KnowledgeSource[];
+  grounded: boolean;
+  provider: string;
+  model: string;
+};
+
 export async function apiFetch<T>(path: string, token?: string | null, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   if (token) headers.set("Authorization", `Bearer ${token}`);

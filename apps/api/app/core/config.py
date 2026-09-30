@@ -19,10 +19,13 @@ class Settings(BaseSettings):
     refresh_cookie_name: str = "finance_ai_refresh"
     demo_user_password: SecretStr = SecretStr("FinanceAI123!")
     document_storage_path: str = "/app/storage"
+    knowledge_storage_path: str = "/app/storage/knowledge"
     max_upload_size_mb: int = 10
     ai_provider: str = "demo"
     openai_api_key: SecretStr | None = None
     openai_model: str = "gpt-4o-mini"
+    openai_embedding_model: str = "text-embedding-3-small"
+    embedding_dimensions: int = 1536
     database_url: str = "postgresql+asyncpg://finance_ai:finance_ai_dev@localhost:5432/finance_ai"
     cors_origins: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: ["http://localhost:3000"]
