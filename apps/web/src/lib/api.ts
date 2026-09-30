@@ -152,6 +152,15 @@ export type AnomalyAnalysisResponse = {
   analyzed_at: string;
 };
 
+export type WorkflowQueryResponse = {
+  answer: string;
+  route: "finance" | "knowledge" | "anomalies" | "documents";
+  trace: string[];
+  sources: KnowledgeSource[];
+  metadata: Record<string, unknown>;
+  validated: boolean;
+};
+
 export async function apiFetch<T>(path: string, token?: string | null, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   if (token) headers.set("Authorization", `Bearer ${token}`);

@@ -10,12 +10,12 @@ import {
   CostCenter,
   Dashboard,
   DocumentExtraction,
-  FinancialChatResponse,
   FinancialDocument,
   Invoice,
   KnowledgeDocument,
   KnowledgeQueryResponse,
   Supplier,
+  WorkflowQueryResponse,
 } from "@/lib/api";
 
 type Tab = "dashboard" | "assistant" | "knowledge" | "anomalies" | "invoices" | "suppliers" | "cost-centers" | "documents";
@@ -192,18 +192,18 @@ function DashboardView({ data }: { data: Dashboard | null }) {
   </div>;
 }
 
-type ChatMessage = { role: "user" | "assistant"; text: string; meta?: string };
+type ChatMessage = { role: "user" | "assistant"; text: string; meta?: string; sources?: WorkflowQueryResponse["sources"] };
 
 const chatSuggestions = [
   "Quais pagamentos vencem nos próximos 15 dias?",
-  "Quanto gastamos com tecnologia neste mês?",
-  "Quais são nossos cinco maiores fornecedores?",
-  "Compare as despesas deste mês com o mês anterior.",
+  "Qual é o limite da política de reembolso para hospedagem?",
+  "Existem despesas suspeitas ou anomalias?",
+  "Como faço para extrair um documento financeiro?",
 ];
 
 function AssistantView({ token }: { token: string }) {
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { role: "assistant", text: "Olá! Posso consultar os dados financeiros da sua empresa usando ferramentas seguras e somente leitura.", meta: "FinanceAI · modo seguro" },
+    { role: "assistant", text: "Olá! O LangGraph direciona cada pergunta para finanças, políticas internas, anomalias ou processamento de documentos e valida a resposta antes de exibi-la.", meta: "FinanceAI · fluxo orquestrado" },
   ]);
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
@@ -214,8 +214,8 @@ function AssistantView({ token }: { token: string }) {
     setMessages((current) => [...current, { role: "user", text: clean }]);
     setValue(""); setBusy(true);
     try {
-      const response = await apiFetch<FinancialChatResponse>("/api/v1/ai/chat", token, { method: "POST", body: JSON.stringify({ message: clean }) });
-      setMessages((current) => [...current, { role: "assistant", text: response.answer, meta: `${response.provider} · ${response.tool}` }]);
+      const response = await apiFetch<WorkflowQueryResponse>("/api/v1/workflows/query", token, { method: "POST", body: JSON.stringify({ message: clean }) });
+      setMessages((current) => [...current, { role: "assistant", text: response.answer, meta: `${response.route} · ${response.trace.join(" → ")} · ${response.validated ? "validado" : "bloqueado"}`, sources: response.sources }]);
     } catch (cause) {
       setMessages((current) => [...current, { role: "assistant", text: cause instanceof Error ? cause.message : "Não foi possível consultar os dados.", meta: "erro" }]);
     } finally { setBusy(false); }
@@ -223,11 +223,11 @@ function AssistantView({ token }: { token: string }) {
 
   return <div className="grid gap-5 xl:grid-cols-[1fr_300px]">
     <section className="flex min-h-[620px] flex-col overflow-hidden rounded-2xl border border-[#dfe7e3] bg-white">
-      <div className="border-b border-[#e6ece9] px-6 py-4"><h2 className="font-black">Converse com seus dados</h2><p className="mt-1 text-xs text-[#708078]">O assistente escolhe consultas controladas; não possui acesso SQL livre.</p></div>
-      <div className="flex-1 space-y-4 overflow-y-auto p-5 sm:p-6">{messages.map((message, index) => <div className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`} key={`${message.role}-${index}`}><div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-6 ${message.role === "user" ? "bg-[#0b6b4f] text-white" : "bg-[#f0f4f2] text-[#23352e]"}`}><p>{message.text}</p>{message.meta && <p className={`mt-2 text-[10px] font-bold uppercase tracking-wide ${message.role === "user" ? "text-emerald-100" : "text-[#779087]"}`}>{message.meta}</p>}</div></div>)}{busy && <div className="w-fit rounded-2xl bg-[#f0f4f2] px-4 py-3 text-sm text-[#61716a]">Consultando ferramenta segura…</div>}</div>
+      <div className="border-b border-[#e6ece9] px-6 py-4"><h2 className="font-black">Converse com o FinanceAI</h2><p className="mt-1 text-xs text-[#708078]">O LangGraph roteia, executa serviços controlados e valida cada resposta; não possui acesso SQL livre.</p></div>
+      <div className="flex-1 space-y-4 overflow-y-auto p-5 sm:p-6">{messages.map((message, index) => <div className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`} key={`${message.role}-${index}`}><div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-6 ${message.role === "user" ? "bg-[#0b6b4f] text-white" : "bg-[#f0f4f2] text-[#23352e]"}`}><p>{message.text}</p>{message.sources && message.sources.length > 0 && <div className="mt-3 space-y-2 border-t border-[#d8e3de] pt-3">{message.sources.map((source, sourceIndex) => <p className="text-xs text-[#5e7068]" key={`${source.document_id}-${sourceIndex}`}><strong>{source.document_name}{source.page_number ? ` · p. ${source.page_number}` : ""}:</strong> {source.excerpt}</p>)}</div>}{message.meta && <p className={`mt-2 text-[10px] font-bold uppercase tracking-wide ${message.role === "user" ? "text-emerald-100" : "text-[#779087]"}`}>{message.meta}</p>}</div></div>)}{busy && <div className="w-fit rounded-2xl bg-[#f0f4f2] px-4 py-3 text-sm text-[#61716a]">Executando fluxo seguro…</div>}</div>
       <form className="flex gap-3 border-t border-[#e6ece9] p-4" onSubmit={(event) => { event.preventDefault(); void ask(value); }}><input className="field flex-1" value={value} onChange={(event) => setValue(event.target.value)} placeholder="Pergunte sobre despesas, vencimentos ou fornecedores…" maxLength={1000} /><button className="rounded-xl bg-[#0b6b4f] px-5 py-3 text-sm font-bold text-white disabled:opacity-50" disabled={busy || value.trim().length < 3}>Enviar</button></form>
     </section>
-    <aside className="rounded-2xl bg-[#102a21] p-5 text-white"><p className="text-xs font-black uppercase tracking-[0.15em] text-[#c8f266]">Sugestões</p><div className="mt-5 space-y-3">{chatSuggestions.map((suggestion) => <button className="w-full rounded-xl border border-white/10 bg-white/[0.07] p-3 text-left text-sm leading-5 text-emerald-50/80 transition hover:bg-white/15" key={suggestion} onClick={() => void ask(suggestion)}>{suggestion}</button>)}</div><div className="mt-6 border-t border-white/10 pt-5"><p className="text-xs font-bold">Proteções ativas</p><ul className="mt-3 space-y-2 text-xs leading-5 text-emerald-100/60"><li>• Escopo por empresa</li><li>• Ferramentas somente leitura</li><li>• Períodos e limites controlados</li><li>• Sem SQL gerado pela IA</li></ul></div></aside>
+    <aside className="rounded-2xl bg-[#102a21] p-5 text-white"><p className="text-xs font-black uppercase tracking-[0.15em] text-[#c8f266]">Sugestões</p><div className="mt-5 space-y-3">{chatSuggestions.map((suggestion) => <button className="w-full rounded-xl border border-white/10 bg-white/[0.07] p-3 text-left text-sm leading-5 text-emerald-50/80 transition hover:bg-white/15" key={suggestion} onClick={() => void ask(suggestion)}>{suggestion}</button>)}</div><div className="mt-6 border-t border-white/10 pt-5"><p className="text-xs font-bold">Fluxo ativo</p><ul className="mt-3 space-y-2 text-xs leading-5 text-emerald-100/60"><li>• Roteador de intenção</li><li>• Agentes especializados</li><li>• Escopo por empresa</li><li>• Validação final obrigatória</li></ul></div></aside>
   </div>;
 }
 

@@ -2,7 +2,7 @@
 
 FinanceAI is a portfolio-grade B2B financial operations platform designed to demonstrate practical full-stack engineering, automation, and responsible AI integration.
 
-> Current status: **Phase 10 — explainable anomaly detection complete**. The platform now includes authentication, financial operations, dashboard analytics, protected uploads, human-reviewed extraction, safe assistants, cited RAG, and auditable financial anomaly rules with optional executive AI analysis.
+> Current status: **Phase 11 — LangGraph orchestration complete**. The platform now includes authentication, financial operations, dashboard analytics, protected uploads, human-reviewed extraction, safe assistants, cited RAG, explainable anomaly detection, and a validated multi-route workflow.
 
 ## Why this project exists
 
@@ -157,7 +157,7 @@ Every query is scoped by the authenticated user's `company_id`; the model never 
 
 ## Roadmap
 
-The project is developed in deliberately small phases. Phases 1–10 cover foundation, persistence, authentication, financial operations, dashboard analytics, secure document ingestion, human-reviewed AI extraction, safe assistants, cited RAG, and explainable anomaly detection. See [docs/architecture.md](docs/architecture.md) for the complete task breakdown.
+The project is developed in deliberately small phases. Phases 1–11 cover foundation, persistence, authentication, financial operations, dashboard analytics, secure document ingestion, human-reviewed AI extraction, safe assistants, cited RAG, explainable anomaly detection, and LangGraph orchestration. See [docs/architecture.md](docs/architecture.md) for the complete task breakdown.
 
 ### Phase 9 knowledge base
 
@@ -176,4 +176,17 @@ The project is developed in deliberately small phases. Phases 1–10 cover found
 - The dashboard anomaly count is backed by persisted findings.
 - “Analyze with AI” summarizes an already-calculated finding and recommends human checks without making payment decisions.
 - `AI_PROVIDER=demo` produces a deterministic executive summary, while OpenAI mode uses the Responses API with `store=false`.
+
+### Phase 11 LangGraph orchestration
+
+The unified assistant uses a deliberately small state graph:
+
+`intent router → finance tools | RAG | anomalies | document guidance → response validator`
+
+- The router is deterministic and sends each request to exactly one specialist.
+- The finance node reuses tenant-scoped, read-only tools; it never generates SQL.
+- The RAG node can answer only with cited internal sources or safely abstain.
+- The anomaly node summarizes persisted findings, and the document node preserves mandatory upload and human review.
+- Every route passes through a final validator that checks its safety contract.
+- The API returns the execution trace so the workflow is demonstrable and auditable in the UI.
 
