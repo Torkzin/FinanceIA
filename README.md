@@ -1,8 +1,10 @@
 # FinanceAI
 
+[![CI](https://github.com/Torkzin/FinanceIA/actions/workflows/ci.yml/badge.svg)](https://github.com/Torkzin/FinanceIA/actions/workflows/ci.yml)
+
 FinanceAI is a portfolio-grade B2B financial operations platform designed to demonstrate practical full-stack engineering, automation, and responsible AI integration.
 
-> Current status: **Phase 12 — simulated ERP integration complete**. The platform now includes authentication, financial operations, dashboard analytics, protected uploads, human-reviewed extraction, safe assistants, cited RAG, explainable anomaly detection, LangGraph orchestration, and idempotent external synchronization.
+> Current status: **Phase 13 — automated quality pipeline complete**. The platform now includes authentication, financial operations, responsible AI workflows, idempotent ERP synchronization, expanded contract and permission tests, branch coverage enforcement, migration drift detection, and GitHub Actions CI.
 
 ## Why this project exists
 
@@ -69,13 +71,23 @@ npm run dev:web
 
 ```bash
 npm run lint:web
-npm run typecheck:web
 npm run build:web
+npm run typecheck:web
 
 cd apps/api
 ruff check .
 pytest
 ```
+
+The backend test command enforces at least 60% branch-aware coverage. Database integration tests are opt-in locally so fast unit and contract tests remain easy to run:
+
+```powershell
+$env:RUN_DB_TESTS="1"
+$env:DATABASE_URL="postgresql+asyncpg://finance_ai:finance_ai_dev@localhost:5433/finance_ai"
+pytest
+```
+
+GitHub Actions always runs the database tests against a disposable pgvector/PostgreSQL service, applies every Alembic migration, checks for model/migration drift, and validates backend lint, tests, coverage, frontend lint, TypeScript, and the production build.
 
 ## Database lifecycle
 
@@ -199,4 +211,13 @@ The unified assistant uses a deliberately small state graph:
 - Company-scoped connections store the latest checkpoint, while every completed or failed run keeps a safe summary for auditing.
 - The workspace provides source preview, one-click synchronization, result counts, warnings, and recent execution history.
 - No external credentials or paid services are needed for the portfolio demonstration.
+
+### Phase 13 test hardening and CI
+
+- API contract tests exercise the external ERP payloads and authenticated synchronization response.
+- Permission tests prove that anonymous and manager users cannot execute protected financial writes.
+- A PostgreSQL integration test executes two ERP synchronizations and verifies idempotency, checkpoints, and audit runs inside an isolated transaction.
+- LangGraph safety contracts reject financial answers without approved tools and anomaly summaries without deterministic totals.
+- Coverage uses statement and branch measurement with a required 60% baseline and an XML artifact.
+- CI applies migrations and runs `alembic check`, preventing database models from silently drifting away from migration history.
 

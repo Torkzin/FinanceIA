@@ -67,3 +67,34 @@ async def test_document_agent_requires_upload_and_human_review() -> None:
 
     assert result["metadata"]["requires_upload"] is True
     assert result["metadata"]["requires_human_review"] is True
+
+
+@pytest.mark.asyncio
+async def test_finance_validator_blocks_answer_without_safe_tool() -> None:
+    result = await validation_node(
+        {
+            "route": "finance",
+            "answer": "O total é R$ 10.000,00.",
+            "sources": [],
+            "metadata": {},
+            "trace": ["intent_router", "finance_tool_agent"],
+        }
+    )
+
+    assert result["validated"] is False
+    assert "Não foi possível validar" in result["answer"]
+
+
+@pytest.mark.asyncio
+async def test_anomaly_validator_requires_deterministic_integer_total() -> None:
+    result = await validation_node(
+        {
+            "route": "anomalies",
+            "answer": "Foram encontradas duas anomalias.",
+            "sources": [],
+            "metadata": {"total": "2"},
+            "trace": ["intent_router", "anomaly_agent"],
+        }
+    )
+
+    assert result["validated"] is False

@@ -7,6 +7,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -56,7 +57,15 @@ class KnowledgeDocument(UUIDPrimaryKeyMixin, CompanyOwnedMixin, TimestampMixin, 
 
 class KnowledgeChunk(UUIDPrimaryKeyMixin, CompanyOwnedMixin, TimestampMixin, Base):
     __tablename__ = "knowledge_chunks"
-    __table_args__ = (UniqueConstraint("document_id", "chunk_index"),)
+    __table_args__ = (
+        UniqueConstraint("document_id", "chunk_index"),
+        Index(
+            "ix_knowledge_chunks_embedding_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
+    )
 
     document_id: Mapped[UUID] = mapped_column(
         Uuid, ForeignKey("knowledge_documents.id", ondelete="CASCADE"), nullable=False, index=True
