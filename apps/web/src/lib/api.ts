@@ -161,6 +161,46 @@ export type WorkflowQueryResponse = {
   validated: boolean;
 };
 
+export type ERPSyncCounts = {
+  received: number;
+  created: number;
+  updated: number;
+  skipped: number;
+};
+
+export type ERPPreview = {
+  source: string;
+  generated_at: string;
+  vendor_count: number;
+  invoice_count: number;
+  connection: {
+    adapter: string;
+    status: string;
+    checkpoint: string | null;
+    last_sync_at: string | null;
+    last_sync_status: string | null;
+  } | null;
+};
+
+export type ERPSyncResponse = {
+  run_id: string;
+  source: string;
+  checkpoint: string;
+  vendors: ERPSyncCounts;
+  invoices: ERPSyncCounts;
+  warnings: string[];
+  completed_at: string;
+};
+
+export type ERPSyncRun = {
+  id: string;
+  status: string;
+  started_at: string;
+  completed_at: string;
+  summary: Record<string, unknown>;
+  error_message: string | null;
+};
+
 export async function apiFetch<T>(path: string, token?: string | null, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   if (token) headers.set("Authorization", `Bearer ${token}`);

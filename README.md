@@ -2,7 +2,7 @@
 
 FinanceAI is a portfolio-grade B2B financial operations platform designed to demonstrate practical full-stack engineering, automation, and responsible AI integration.
 
-> Current status: **Phase 11 — LangGraph orchestration complete**. The platform now includes authentication, financial operations, dashboard analytics, protected uploads, human-reviewed extraction, safe assistants, cited RAG, explainable anomaly detection, and a validated multi-route workflow.
+> Current status: **Phase 12 — simulated ERP integration complete**. The platform now includes authentication, financial operations, dashboard analytics, protected uploads, human-reviewed extraction, safe assistants, cited RAG, explainable anomaly detection, LangGraph orchestration, and idempotent external synchronization.
 
 ## Why this project exists
 
@@ -14,7 +14,7 @@ This project demonstrates AI applied to real financial workflows—not a generic
 Browser -> Next.js web -> FastAPI /api/v1 -> PostgreSQL + pgvector
                               |
                               +-> AI gateway (future)
-                              +-> ERP adapter (future)
+                              +-> replaceable ERP adapter -> mock external API
 ```
 
 - `apps/web`: Next.js App Router, React, TypeScript, and Tailwind CSS.
@@ -157,7 +157,7 @@ Every query is scoped by the authenticated user's `company_id`; the model never 
 
 ## Roadmap
 
-The project is developed in deliberately small phases. Phases 1–11 cover foundation, persistence, authentication, financial operations, dashboard analytics, secure document ingestion, human-reviewed AI extraction, safe assistants, cited RAG, explainable anomaly detection, and LangGraph orchestration. See [docs/architecture.md](docs/architecture.md) for the complete task breakdown.
+The project is developed in deliberately small phases. Phases 1–12 cover foundation, persistence, authentication, financial operations, dashboard analytics, secure document ingestion, human-reviewed AI extraction, safe assistants, cited RAG, explainable anomaly detection, LangGraph orchestration, and simulated ERP synchronization. See [docs/architecture.md](docs/architecture.md) for the complete task breakdown.
 
 ### Phase 9 knowledge base
 
@@ -189,4 +189,14 @@ The unified assistant uses a deliberately small state graph:
 - The anomaly node summarizes persisted findings, and the document node preserves mandatory upload and human review.
 - Every route passes through a final validator that checks its safety contract.
 - The API returns the execution trace so the workflow is demonstrable and auditable in the UI.
+
+### Phase 12 simulated ERP integration
+
+- `GET /external-api/vendors` and `GET /external-api/invoices` expose a fictional external ERP contract.
+- An application-owned adapter isolates the synchronization use case from the external provider.
+- `POST /api/v1/integrations/erp/sync` imports tenant-scoped suppliers and invoices for admin and finance roles.
+- Synchronization is idempotent by supplier document and invoice business key; manual records are never overwritten by ERP data.
+- Company-scoped connections store the latest checkpoint, while every completed or failed run keeps a safe summary for auditing.
+- The workspace provides source preview, one-click synchronization, result counts, warnings, and recent execution history.
+- No external credentials or paid services are needed for the portfolio demonstration.
 

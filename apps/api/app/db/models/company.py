@@ -15,3 +15,6 @@ class Company(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     suppliers: Mapped[list["Supplier"]] = relationship(back_populates="company")  # noqa: F821
     cost_centers: Mapped[list["CostCenter"]] = relationship(back_populates="company")  # noqa: F821
     invoices: Mapped[list["Invoice"]] = relationship(back_populates="company")  # noqa: F821
+    integration_connections: Mapped[list["IntegrationConnection"]] = relationship(  # noqa: F821
+        back_populates="company", cascade="all, delete-orphan"
+    )

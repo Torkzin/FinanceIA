@@ -10,6 +10,9 @@ import {
   CostCenter,
   Dashboard,
   DocumentExtraction,
+  ERPPreview,
+  ERPSyncResponse,
+  ERPSyncRun,
   FinancialDocument,
   Invoice,
   KnowledgeDocument,
@@ -18,7 +21,7 @@ import {
   WorkflowQueryResponse,
 } from "@/lib/api";
 
-type Tab = "dashboard" | "assistant" | "knowledge" | "anomalies" | "invoices" | "suppliers" | "cost-centers" | "documents";
+type Tab = "dashboard" | "assistant" | "knowledge" | "anomalies" | "erp" | "invoices" | "suppliers" | "cost-centers" | "documents";
 type ListResponse<T> = { items: T[]; total: number };
 
 const tabs: Array<{ id: Tab; label: string }> = [
@@ -26,6 +29,7 @@ const tabs: Array<{ id: Tab; label: string }> = [
   { id: "assistant", label: "Assistente financeiro" },
   { id: "knowledge", label: "Base de conhecimento" },
   { id: "anomalies", label: "Anomalias" },
+  { id: "erp", label: "Integração ERP" },
   { id: "invoices", label: "Faturas" },
   { id: "suppliers", label: "Fornecedores" },
   { id: "cost-centers", label: "Centros de custo" },
@@ -163,6 +167,7 @@ export function WorkspaceClient() {
           {tab === "assistant" && <AssistantView token={token} />}
           {tab === "knowledge" && <KnowledgeView data={knowledgeDocuments} token={token} isAdmin={user.role === "admin"} refresh={load} />}
           {tab === "anomalies" && <AnomaliesView data={anomalies} token={token} canDetect={["admin", "finance"].includes(user.role)} refresh={load} />}
+          {tab === "erp" && <ERPIntegrationView token={token} canSync={["admin", "finance"].includes(user.role)} refresh={load} />}
           {tab === "invoices" && <InvoicesView data={invoices} suppliers={suppliers?.items ?? []} />}
           {tab === "suppliers" && <SuppliersView data={suppliers} token={token} refresh={load} />}
           {tab === "cost-centers" && <CostCentersView data={costCenters} />}
@@ -308,6 +313,63 @@ function AnomaliesView({ data, token, canDetect, refresh }: { data: ListResponse
     {message && <p className="rounded-xl bg-white p-4 text-sm font-bold text-[#0b6b4f]">{message}</p>}
     {data.items.length === 0 ? <div className="rounded-2xl border border-[#dfe7e3] bg-white p-10 text-center text-sm text-[#66766f]">Nenhuma anomalia registrada. Execute a detecção para analisar o histórico.</div> : <div className="space-y-4">{data.items.map((item) => <article className="rounded-2xl border border-[#dfe7e3] bg-white p-5" key={item.id}><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><span className={`rounded-full px-2.5 py-1 text-xs font-black uppercase ${item.severity === "high" ? "bg-red-50 text-red-700" : item.severity === "medium" ? "bg-amber-50 text-amber-700" : "bg-sky-50 text-sky-700"}`}>{item.severity}</span><span className="text-xs font-bold text-[#708078]">{item.status}</span></div><h3 className="mt-3 font-black">{anomalyLabels[item.anomaly_type] ?? item.anomaly_type}</h3><p className="mt-2 text-sm leading-6 text-[#5d6c66]">{item.explanation}</p></div><button className="rounded-xl border border-[#b9c9c2] px-4 py-2.5 text-xs font-bold text-[#0b6b4f] disabled:opacity-50" disabled={busy !== null} onClick={() => void analyze(item.id)}>{busy === item.id ? "Gerando…" : item.ai_analysis ? "Atualizar análise" : "Analisar com IA"}</button></div><div className="mt-4 flex flex-wrap gap-2">{Object.entries(item.metrics).slice(0, 6).map(([key, value]) => <span className="rounded-lg bg-[#f1f5f3] px-2.5 py-1.5 text-xs text-[#53635c]" key={key}><strong>{key.replaceAll("_", " ")}:</strong> {Array.isArray(value) ? value.length : String(value)}</span>)}</div>{item.ai_analysis && <div className="mt-5 rounded-xl border-l-4 border-[#0b6b4f] bg-[#f2f7f4] p-4"><p className="text-xs font-black uppercase tracking-[0.12em] text-[#0b6b4f]">Análise executiva</p><p className="mt-2 text-sm leading-6 text-[#405149]">{item.ai_analysis}</p><p className="mt-2 text-[10px] uppercase tracking-wide text-[#829087]">{item.ai_provider} · {item.ai_model}</p></div>}</article>)}</div>}
   </div>;
+}
+
+function ERPIntegrationView({ token, canSync, refresh }: { token: string; canSync: boolean; refresh: () => Promise<void> }) {
+  const [preview, setPreview] = useState<ERPPreview | null>(null);
+  const [runs, setRuns] = useState<ERPSyncRun[]>([]);
+  const [result, setResult] = useState<ERPSyncResponse | null>(null);
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const loadIntegration = useCallback(async () => {
+    try {
+      const [previewData, runData] = await Promise.all([
+        apiFetch<ERPPreview>("/api/v1/integrations/erp/preview", token),
+        apiFetch<{ items: ERPSyncRun[]; total: number }>("/api/v1/integrations/erp/runs?limit=5", token),
+      ]);
+      setPreview(previewData);
+      setRuns(runData.items);
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : "Não foi possível consultar a integração.");
+    }
+  }, [token]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => void loadIntegration(), 0);
+    return () => window.clearTimeout(timer);
+  }, [loadIntegration]);
+
+  async function synchronize() {
+    setBusy(true); setMessage(""); setResult(null);
+    try {
+      const response = await apiFetch<ERPSyncResponse>("/api/v1/integrations/erp/sync", token, { method: "POST" });
+      setResult(response);
+      setMessage("Sincronização concluída e registrada no histórico.");
+      await Promise.all([loadIntegration(), refresh()]);
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : "Não foi possível sincronizar o ERP.");
+      await loadIntegration();
+    } finally { setBusy(false); }
+  }
+
+  if (!preview) return <Empty />;
+  const lastSync = preview.connection?.last_sync_at
+    ? new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(preview.connection.last_sync_at))
+    : "Ainda não executada";
+  return <div className="space-y-5">
+    <section className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
+      <article className="rounded-2xl bg-[#102a21] p-6 text-white"><p className="text-xs font-black uppercase tracking-[0.15em] text-[#c8f266]">Adapter substituível</p><h2 className="mt-3 text-2xl font-black">ERP simulado conectado</h2><p className="mt-3 max-w-2xl text-sm leading-6 text-emerald-50/70">O FinanceAI consome um contrato próprio de integração. Um ERP real pode substituir o mock sem alterar as regras de sincronização, o banco ou a interface.</p><div className="mt-6 flex flex-wrap gap-2 text-xs"><code className="rounded-lg bg-white/10 px-3 py-2">GET /external-api/vendors</code><code className="rounded-lg bg-white/10 px-3 py-2">GET /external-api/invoices</code></div></article>
+      <article className="rounded-2xl border border-[#dfe7e3] bg-white p-6"><p className="text-sm text-[#66766f]">Última sincronização</p><p className="mt-2 text-xl font-black">{lastSync}</p><div className="mt-5 grid grid-cols-2 gap-3"><div className="rounded-xl bg-[#f2f6f4] p-4"><p className="text-xs text-[#708078]">Fornecedores externos</p><p className="mt-1 text-2xl font-black">{preview.vendor_count}</p></div><div className="rounded-xl bg-[#f2f6f4] p-4"><p className="text-xs text-[#708078]">Faturas externas</p><p className="mt-1 text-2xl font-black">{preview.invoice_count}</p></div></div>{canSync ? <button className="mt-5 w-full rounded-xl bg-[#0b6b4f] px-4 py-3 text-sm font-bold text-white disabled:opacity-50" disabled={busy} onClick={() => void synchronize()}>{busy ? "Sincronizando…" : "Sincronizar agora"}</button> : <p className="mt-5 rounded-xl bg-amber-50 p-3 text-xs text-amber-800">Seu perfil pode consultar o histórico, mas somente admin e financeiro podem sincronizar.</p>}</article>
+    </section>
+    {message && <p className="rounded-xl bg-white p-4 text-sm font-bold text-[#0b6b4f]">{message}</p>}
+    {result && <section className="rounded-2xl border border-[#b8d4c9] bg-white p-6"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[0.15em] text-[#0b6b4f]">Execução concluída</p><h2 className="mt-1 font-black">Resultado idempotente</h2></div><span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">{result.source}</span></div><div className="mt-5 grid gap-4 sm:grid-cols-2"><SyncResultCard label="Fornecedores" counts={result.vendors} /><SyncResultCard label="Faturas" counts={result.invoices} /></div>{result.warnings.length > 0 && <div className="mt-4 rounded-xl bg-amber-50 p-4 text-xs leading-5 text-amber-800">{result.warnings.join(" ")}</div>}</section>}
+    <section className="rounded-2xl border border-[#dfe7e3] bg-white p-6"><h2 className="font-black">Histórico de sincronizações</h2><p className="mt-1 text-xs text-[#708078]">Checkpoints e resumos ficam registrados por empresa, sem armazenar credenciais externas.</p><div className="mt-5 space-y-3">{runs.length === 0 ? <p className="rounded-xl bg-[#f2f6f4] p-4 text-sm text-[#66766f]">Nenhuma execução registrada.</p> : runs.map((run) => <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#e3e9e6] p-4" key={run.id}><div><p className="text-sm font-bold">Execução {run.id.slice(0, 8)}</p><p className="mt-1 text-xs text-[#708078]">{new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(run.completed_at))}</p></div><Status value={run.status} /></div>)}</div></section>
+  </div>;
+}
+
+function SyncResultCard({ label, counts }: { label: string; counts: ERPSyncResponse["vendors"] }) {
+  return <article className="rounded-xl bg-[#f2f6f4] p-4"><p className="font-black">{label}</p><div className="mt-3 grid grid-cols-4 gap-2 text-center text-xs"><div><strong className="block text-lg">{counts.received}</strong>recebidos</div><div><strong className="block text-lg text-emerald-700">{counts.created}</strong>novos</div><div><strong className="block text-lg text-sky-700">{counts.updated}</strong>atualizados</div><div><strong className="block text-lg text-[#708078]">{counts.skipped}</strong>inalterados</div></div></article>;
 }
 
 function InvoicesView({ data, suppliers }: { data: ListResponse<Invoice> | null; suppliers: Supplier[] }) {
